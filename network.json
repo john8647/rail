@@ -6,7 +6,8 @@
     "BRANCH_IB": { "type": "block_section", "x": 400, "y": 325 },
     "BRANCH_HALT": { "type": "station", "x": 500, "y": 350 },
     "TERMINUS": { "type": "station", "x": 700, "y": 550 },
-    "NORTH_HALT": { "type": "station", "x": 350, "y": 150 }
+    "NORTH_HALT": { "type": "station", "x": 350, "y": 150 },
+    "NORTH_IB": { "type": "block_section", "x": 325, "y": 225 }
 
   },
 
@@ -95,16 +96,32 @@
     },
     "SEG_NORTH_2": {
       "from": "JCT1",
+      "to": "NORTH_IB",
+      "length_m": 350,
+      "speed_limit_kmh": 50,
+      "gradient_pct": 0.0,
+      "bidirectional": false
+    },
+    "SEG_NORTH_2B": {
+      "from": "NORTH_IB",
       "to": "NORTH_HALT",
-      "length_m": 700,
+      "length_m": 350,
+      "speed_limit_kmh": 50,
+      "gradient_pct": 0.0,
+      "bidirectional": false
+    },
+    "SEG_NORTH_1A": {
+      "from": "NORTH_HALT",
+      "to": "NORTH_IB",
+      "length_m": 350,
       "speed_limit_kmh": 50,
       "gradient_pct": 0.0,
       "bidirectional": false
     },
     "SEG_NORTH_1": {
-      "from": "NORTH_HALT",
+      "from": "NORTH_IB",
       "to": "JCT1",
-      "length_m": 700,
+      "length_m": 350,
       "speed_limit_kmh": 50,
       "gradient_pct": 0.0,
       "bidirectional": false
@@ -204,24 +221,38 @@
       "next_segment": "SEG_MAIN_2A",
       "block_id": "BLK_MAIN_2A"
     },
-    "SIG_NORTH_HOME": {
+    "SIG_NORTH_DOWN_IB": {
       "segment": "SEG_NORTH_2",
-      "position_m": 650,
-      "direction": "JCT1_TO_NORTH_HALT",
+      "position_m": 300,
+      "direction": "JCT1_TO_NORTH_IB",
+      "next_segment": "SEG_NORTH_2B",
+      "block_id": "BLK_NORTH_2B"
+    },
+    "SIG_NORTH_HOME": {
+      "segment": "SEG_NORTH_2B",
+      "position_m": 300,
+      "direction": "NORTH_IB_TO_NORTH_HALT",
+      "next_segment": "SEG_NORTH_1A",
+      "block_id": "BLK_NORTH_1A"
+    },
+    "SIG_NORTH_UP_IB": {
+      "segment": "SEG_NORTH_1A",
+      "position_m": 300,
+      "direction": "NORTH_HALT_TO_NORTH_IB",
       "next_segment": "SEG_NORTH_1",
       "block_id": "BLK_NORTH_1"
     },
     "SIG_NORTH_UP_MAIN": {
       "segment": "SEG_NORTH_1",
-      "position_m": 600,
+      "position_m": 300,
       "direction": "NORTH_HALT_TO_JCT1",
       "next_segment": "SEG_MAIN_1",
       "block_id": "BLK_MAIN_1"
     },
     "SIG_NORTH_DOWN_BRANCH": {
       "segment": "SEG_NORTH_1",
-      "position_m": 600,
-      "direction": "NORTH_HALT_TO_JCT1",
+      "position_m": 300,
+      "direction": "NORTH_IB_TO_JCT1",
       "next_segment": "SEG_BRANCH_2",
       "block_id": "BLK_BRANCH_2"
     }
@@ -252,11 +283,17 @@
     "BLK_BRANCH_2B": {
       "segments": ["SEG_BRANCH_2B"]
     },
+    "BLK_NORTH_1A": {
+      "segments": ["SEG_NORTH_1A"]
+    },
     "BLK_NORTH_1": {
       "segments": ["SEG_NORTH_1"]
     },
     "BLK_NORTH_2": {
       "segments": ["SEG_NORTH_2"]
+    },
+    "BLK_NORTH_2B": {
+      "segments": ["SEG_NORTH_2B"]
     },
     "BLK_TERMINUS_1": {
       "segments": ["SEG_TERMINUS_1"]
@@ -317,23 +354,23 @@
         "stops": ["TERMINUS", "BRANCH_HALT", "MAIN", "BRANCH_HALT", "TERMINUS"]
     },
     "BRANCH_UP": {
-        "segments": ["SEG_NORTH_1", "SEG_MAIN_1", "SEG_MAIN_1B",
-                     "SEG_MAIN_2A", "SEG_MAIN_2", "SEG_NORTH_2"],
+        "segments": ["SEG_NORTH_1A", "SEG_NORTH_1", "SEG_MAIN_1", "SEG_MAIN_1B",
+                     "SEG_MAIN_2A", "SEG_MAIN_2", "SEG_NORTH_2", "SEG_NORTH_2B"],
         "stops": ["NORTH_HALT", "MAIN", "NORTH_HALT"]
     },
     "BRANCH_DOWN": {
-        "segments": ["SEG_MAIN_2A", "SEG_MAIN_2", "SEG_NORTH_2",
-                     "SEG_NORTH_1", "SEG_MAIN_1", "SEG_MAIN_1B"],
+        "segments": ["SEG_MAIN_2A", "SEG_MAIN_2", "SEG_NORTH_2", "SEG_NORTH_2B",
+                     "SEG_NORTH_1A", "SEG_NORTH_1", "SEG_MAIN_1", "SEG_MAIN_1B"],
         "stops": ["MAIN", "NORTH_HALT", "MAIN"]
     },
     "BRANCH_UP_2": {
-        "segments": ["SEG_BRANCH_1A", "SEG_BRANCH_1", "SEG_NORTH_2",
-                     "SEG_NORTH_1", "SEG_BRANCH_2", "SEG_BRANCH_2B"],
+        "segments": ["SEG_BRANCH_1A", "SEG_BRANCH_1", "SEG_NORTH_2", "SEG_NORTH_2B",
+                     "SEG_NORTH_1A", "SEG_NORTH_1", "SEG_BRANCH_2", "SEG_BRANCH_2B"],
         "stops": ["BRANCH_HALT", "NORTH_HALT", "BRANCH_HALT"]
     },
     "BRANCH_DOWN_2": {
-        "segments": ["SEG_NORTH_1", "SEG_BRANCH_2", "SEG_BRANCH_2B", "SEG_TERMINUS_2",
-                     "SEG_TERMINUS_1", "SEG_BRANCH_1A", "SEG_BRANCH_1", "SEG_NORTH_2"],
+        "segments": ["SEG_NORTH_1A", "SEG_NORTH_1", "SEG_BRANCH_2", "SEG_BRANCH_2B", "SEG_TERMINUS_2",
+                     "SEG_TERMINUS_1", "SEG_BRANCH_1A", "SEG_BRANCH_1", "SEG_NORTH_2", "SEG_NORTH_2B"],
         "stops": ["NORTH_HALT", "BRANCH_HALT", "TERMINUS", "BRANCH_HALT", "NORTH_HALT"]
     }
 
