@@ -10,11 +10,12 @@ from dispatcher import Dispatcher
 from loader import load_world_from_json
 
 BASE_DIR = Path(__file__).parent
-TICK_S = 0.2           # simulated seconds per tick (also real seconds between ticks)
+# simulated seconds per tick (also real seconds between ticks)
+TICK_S = 0.2
 SEND_TIMEOUT_S = 1.0   # drop clients that can't keep up instead of stalling the sim
 
 # Trains the dispatcher can put into service from the UI.
-FLEET = ["T1", "T2", "T3", "T4"]
+FLEET = ["T1", "T2", "T3", "T4", "T5"]
 # Optional services to dispatch at start-up, e.g. [("T1", "UP"), ("T2", "DOWN")].
 # Empty = the network starts clear and everything is dispatched from the UI.
 STARTUP_SERVICES = []
