@@ -67,10 +67,10 @@ class PassengerSystem:
         if station_id not in self.waiting:
             return 0
         space = self.capacity - train.passengers
-        n = int(min(space, self.waiting[station_id]))
+        n = int(min(space, self.waiting[station_id] + 1e-6))   # 1e-6: float tick drift
         if n <= 0:
             return 0
-        self.waiting[station_id] -= n
+        self.waiting[station_id] = max(0.0, self.waiting[station_id] - n)
         train.passengers += n
         self.boarded_total += n
         self._log(f"{train.id} boarded {n} at {station_id}")
@@ -85,7 +85,7 @@ class PassengerSystem:
             "capacity": self.capacity,
             "spawn_max": self.spawn_max,
             "on_board": sum(t.passengers for t in self.world.trains.values()),
-            "waiting": {st: int(w) for st, w in self.waiting.items()},
+            "waiting": {st: int(w + 1e-6) for st, w in self.waiting.items()},
             "delivered_at": dict(self.delivered_at),
             "events": [{"t": t, "text": x} for t, x in reversed(self.events)],
         }

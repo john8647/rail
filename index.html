@@ -199,7 +199,7 @@ let view = { scale: 1, ox: 0, oy: 0 };
 let ws = null;
 let dispatchBuiltFor = null;  // fleet ids the dispatch panel was built for
 // Default route offered for each train (the original timetable); any route can be picked.
-const DEFAULT_ROUTE = { T1: "UP", T2: "DOWN", T3: "BRANCH_UP_2", T4: "BRANCH_UP" };
+const DEFAULT_ROUTE = { T1: "UP", T2: "DOWN", T3: "BRANCH_UP_2", T4: "BRANCH_UP", T5: "BRANCH_DOWN" };
 
 // ---------------------------------------------------------------- websocket
 function sendCommand(action, train, route) {
@@ -526,7 +526,7 @@ const stName = id => stations[id]?.name || id || "–";
 const fmtTime = s => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
 // ---------------------------------------------------------------- dispatcher
-const DISP_TEXT = { AVAILABLE: "Available", QUEUED: "Queued", IN_SERVICE: "In service", FINISHED: "Terminated" };
+const DISP_TEXT = { AVAILABLE: "Available", QUEUED: "Queued", IN_SERVICE: "In service", FINISHED: "Ready" };
 let dispMsgTimer = null;
 
 function showDispMsg(ok, text) {
@@ -585,10 +585,17 @@ function renderDispatch() {
     secondary.hidden = !sec;
     if (sec) { secondary.textContent = sec; secondary.dataset.cmd = f.state === "QUEUED" ? "cancel" : "withdraw"; }
 
+    // Only routes starting where the train is stabled can be picked.
+    const sel = row.querySelector("select");
+    const allowed = new Set(f.allowed_routes || []);
+    for (const opt of sel.options) opt.disabled = !allowed.has(opt.value);
+    if (!allowed.has(sel.value) && allowed.size) sel.value = [...allowed][0];
+
+    const where = f.location ? `At ${stName(f.location)}` : "In depot – can start any route";
     const why = row.querySelector(".why");
     why.textContent = f.state === "QUEUED"
       ? `Waiting for ${f.waiting_for} to clear` + (f.blocked_by?.length ? ` (occupied by ${f.blocked_by.join(", ")})` : "")
-      : "";
+      : f.state === "IN_SERVICE" ? `Returns to ${stName(f.location)}` : where;
   }
 }
 

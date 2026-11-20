@@ -127,6 +127,14 @@ def validate_world(world):
     # Routes must be continuous, and every move between segments should have a signal.
     used_signals = set()
     for rt in world.routes.values():
+        # Round trips only: a train must finish where it started so it is in
+        # place to be dispatched again (see dispatcher.py).
+        if rt.segments and all(s in segs for s in (rt.segments[0], rt.segments[-1])):
+            start = segs[rt.segments[0]].from_node.id
+            end = segs[rt.segments[-1]].to_node.id
+            if start != end:
+                warnings.append(f"route {rt.id} starts at {start} but ends at {end} "
+                                f"(routes must return to where they started)")
         for a, b in zip(rt.segments, rt.segments[1:]):
             if a not in segs or b not in segs:
                 warnings.append(f"route {rt.id} uses unknown segment {a if a not in segs else b}")

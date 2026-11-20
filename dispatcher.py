@@ -2,6 +2,12 @@
 
 A dispatch request is queued if the route's first block is occupied and the
 train enters automatically as soon as it clears (checked every tick).
+
+Trains have a location. A train that has never run sits in the depot and can
+enter service on any route. Every route is a round trip, so once a train has
+run it is stabled at the station it started from, and can only be dispatched
+on routes that start there. Withdrawing a train mid-trip returns it to the
+start of that trip (its passengers are lost).
 """
 
 from loader import spawn_train
@@ -12,8 +18,26 @@ class Dispatcher:
         self.world = world
         self.fleet = list(fleet)        # train ids that can be dispatched
         self.pending = []               # [{"train", "route", "since"}] in FIFO order
+        self.location = {tid: None for tid in self.fleet}   # None = depot (any route)
 
     # ------------------------------------------------------------ helpers
+    def origin(self, route_id):
+        return self.world.segments[self.world.routes[route_id].segments[0]].from_node.id
+
+    def allowed_routes(self, train_id):
+        loc = self.location.get(train_id)
+        return [r for r in self.world.routes if loc is None or self.origin(r) == loc]
+
+    def _station_name(self, st_id):
+        st = self.world.stations.get(st_id)
+        return st.name if st else st_id
+
+    def _update_locations(self):
+        for tid in self.fleet:
+            t = self.world.trains.get(tid)
+            if t is not None and t.finished and t.at_station:
+                self.location[tid] = t.at_station
+
     def _active(self, train_id):
         t = self.world.trains.get(train_id)
         return t is not None and not t.finished
@@ -42,6 +66,12 @@ class Dispatcher:
             return False, f"Unknown route {route_id}"
         if self._active(train_id):
             return False, f"{train_id} is already in service – withdraw it first"
+        self._update_locations()
+        if route_id not in self.allowed_routes(train_id):
+            loc = self.location[train_id]
+            options = ", ".join(self.allowed_routes(train_id)) or "none"
+            return False, (f"{train_id} is at {self._station_name(loc)}; {route_id} starts at "
+                           f"{self._station_name(self.origin(route_id))}. Routes from here: {options}")
         existing = self._pending_for(train_id)
         if existing:
             existing["route"] = route_id      # re-dispatch while queued: change route
@@ -67,12 +97,19 @@ class Dispatcher:
         """Take a train out of service (running or finished) and free what it holds."""
         if train_id not in self.world.trains:
             return self.cancel(train_id)
+        t = self.world.trains[train_id]
+        lost = t.passengers
+        # Back to the station it set out from (a finished train is already there).
+        self.location[train_id] = t.at_station if t.finished else self.origin(t.route_id)
         self.world.remove_train(train_id)
-        return True, f"{train_id} withdrawn"
+        where = self._station_name(self.location[train_id])
+        return True, (f"{train_id} withdrawn to {where}"
+                      + (f" – {lost} passengers lost" if lost else ""))
 
     # ------------------------------------------------------------ per tick
     def process(self):
         """Spawn any queued trains whose first block is now free (FIFO per block)."""
+        self._update_locations()
         claimed_blocks = set()
         for p in list(self.pending):
             _, block_id = self._start_block(p["route"])
@@ -85,11 +122,13 @@ class Dispatcher:
             if p["train"] in self.world.trains:
                 self.world.remove_train(p["train"])
             spawn_train(self.world, p["train"], p["route"])
+            self.location[p["train"]] = self.origin(p["route"])   # where it will return to
             self.pending.remove(p)
             print(f"[dispatch] {p['train']} entered service on {p['route']}")
 
     # ------------------------------------------------------------ export
     def export(self):
+        self._update_locations()
         fleet = []
         for tid in self.fleet:
             t = self.world.trains.get(tid)
@@ -105,4 +144,6 @@ class Dispatcher:
                 fleet.append({"id": tid, "state": "FINISHED", "route": t.route_id})
             else:
                 fleet.append({"id": tid, "state": "AVAILABLE", "route": None})
+            fleet[-1]["location"] = self.location[tid]          # None = depot
+            fleet[-1]["allowed_routes"] = self.allowed_routes(tid)
         return {"fleet": fleet}
