@@ -1,0 +1,739 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RailWorld Control</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --panel: #161d25;
+    --panel-2: #1c252f;
+    --line: #2a3541;
+    --text: #e6edf3;
+    --muted: #8b98a5;
+    --track: #4a5866;
+    --red: #ff4d4f;
+    --green: #2fd36b;
+    --amber: #f5b83d;
+    --blue: #4ea1ff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 13px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: grid;
+    grid-template-rows: auto 1fr;
+    overflow: hidden;
+  }
+  header {
+    display: flex; align-items: center; gap: 20px;
+    padding: 10px 16px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+  }
+  header h1 { font-size: 15px; margin: 0; letter-spacing: .04em; }
+  .stat { color: var(--muted); }
+  .stat b { color: var(--text); font-variant-numeric: tabular-nums; }
+  .conn { display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .dot.on { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .dot.off { background: var(--red); }
+  header label { margin-left: auto; color: var(--muted); display: flex; gap: 6px; align-items: center; cursor: pointer; }
+  header label + label { margin-left: 0; }
+
+  main { display: grid; grid-template-columns: 1fr 360px; min-height: 0; }
+  #mapwrap { position: relative; min-width: 0; min-height: 0; }
+  canvas { display: block; width: 100%; height: 100%; }
+  #tip {
+    position: absolute; pointer-events: none; display: none;
+    background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 6px; padding: 8px 10px; font-size: 12px;
+    box-shadow: 0 6px 20px rgba(0,0,0,.4); max-width: 260px; white-space: nowrap;
+  }
+  #tip .k { color: var(--muted); }
+
+  aside {
+    background: var(--panel); border-left: 1px solid var(--line);
+    overflow-y: auto; padding: 12px;
+  }
+  aside h2 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .1em;
+    color: var(--muted); margin: 6px 4px 8px;
+  }
+  .card {
+    background: var(--panel-2); border: 1px solid var(--line);
+    border-left: 4px solid var(--c, var(--blue));
+    border-radius: 6px; padding: 8px 10px; margin-bottom: 8px;
+  }
+  .card.hl { outline: 1px solid var(--c); }
+  .row { display: flex; align-items: center; gap: 8px; }
+  .row + .row { margin-top: 4px; }
+  .tid { font-weight: 700; font-size: 14px; }
+  .route { color: var(--muted); }
+  .badge {
+    margin-left: auto; font-size: 11px; font-weight: 600;
+    padding: 1px 7px; border-radius: 10px; white-space: nowrap;
+  }
+  .b-RUNNING { background: rgba(47,211,107,.15); color: var(--green); }
+  .b-DWELL { background: rgba(78,161,255,.15); color: var(--blue); }
+  .b-SIGNAL, .b-WAIT_BLOCK, .b-WAIT_SWITCH { background: rgba(255,77,79,.15); color: var(--red); }
+  .b-FINISHED { background: rgba(139,152,165,.15); color: var(--muted); }
+  .meta { color: var(--muted); font-size: 12px; }
+  .meta b { color: var(--text); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .bar { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; flex: 1; }
+  .bar i { display: block; height: 100%; background: var(--c); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  td { padding: 4px; border-bottom: 1px solid var(--line); }
+  td.lamp { width: 14px; }
+  .lampdot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .lampdot.RED { background: var(--red); box-shadow: 0 0 6px var(--red); }
+  .lampdot.GREEN { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  tr.hl td { background: rgba(255,255,255,.05); }
+  .mono { font-family: ui-monospace, Consolas, monospace; font-size: 11px; }
+
+  /* dispatcher */
+  .disp { display: grid; grid-template-columns: auto 1fr; gap: 6px 8px; align-items: center;
+          background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px;
+          padding: 8px 10px; margin-bottom: 8px; border-left: 4px solid var(--c); }
+  .disp .tid { min-width: 26px; }
+  .disp .dstate { justify-self: end; }
+  .disp .controls { grid-column: 1 / -1; display: flex; gap: 6px; }
+  .disp select { flex: 1; min-width: 0; background: var(--bg); color: var(--text);
+                 border: 1px solid var(--line); border-radius: 4px; padding: 4px 6px; font: inherit; }
+  .disp .why { grid-column: 1 / -1; }
+  button { font: inherit; font-weight: 600; border-radius: 4px; padding: 4px 10px; cursor: pointer;
+           border: 1px solid var(--line); background: var(--panel); color: var(--text); }
+  button.primary { background: var(--blue); border-color: var(--blue); color: #08111c; }
+  button:disabled { opacity: .4; cursor: default; }
+  button[hidden] { display: none; }
+  .b-AVAILABLE { background: rgba(47,211,107,.15); color: var(--green); }
+  .b-QUEUED { background: rgba(245,184,61,.15); color: var(--amber); }
+  .b-IN_SERVICE { background: rgba(78,161,255,.15); color: var(--blue); }
+  #dispMsg { min-height: 18px; margin: 0 4px 8px; font-size: 12px; color: var(--muted); }
+  #dispMsg.err { color: var(--red); }
+  .empty { color: var(--muted); padding: 4px 4px 10px; }
+
+  /* scoring */
+  .score-card { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px;
+                padding: 10px; margin-bottom: 8px; }
+  .score-big { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .score-big small { font-size: 13px; color: var(--muted); font-weight: 500; }
+  .score-card .bar { height: 8px; margin: 6px 0; }
+  .score-card .bar i { background: var(--green); }
+  .stn { display: grid; grid-template-columns: 1fr 90px 54px; gap: 8px; align-items: center; margin-top: 4px; font-size: 12px; }
+  .stn .bar { height: 6px; }
+  .stn .bar i { background: var(--amber); }
+  .stn .bar i.full { background: var(--red); }
+  .stn .n { text-align: right; font-variant-numeric: tabular-nums; }
+  .events { margin-top: 8px; font-size: 11px; color: var(--muted); max-height: 92px; overflow: hidden; }
+  .events b { color: var(--text); font-weight: 500; font-variant-numeric: tabular-nums; }
+  #goalBanner { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); display: none;
+                background: rgba(22,29,37,.95); border: 1px solid var(--green); border-radius: 8px;
+                padding: 12px 18px; text-align: center; box-shadow: 0 8px 30px rgba(0,0,0,.5); }
+  #goalBanner .t { font-size: 18px; font-weight: 700; color: var(--green); }
+  #goalBanner button { margin-top: 8px; }
+  header button { margin-left: 4px; }
+
+  @media (max-width: 800px) {
+    main { grid-template-columns: 1fr; grid-template-rows: 55vh 1fr; }
+    aside { border-left: 0; border-top: 1px solid var(--line); }
+    header { flex-wrap: wrap; gap: 10px 16px; }
+    header label { margin-left: 0; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>RAILWORLD</h1>
+  <span class="conn"><span id="connDot" class="dot"></span><span id="connText" class="stat">connecting…</span></span>
+  <span class="stat">Sim time <b id="simTime">00:00</b></span>
+  <span class="stat">Score <b id="hdrScore">0</b> / <b id="hdrGoal">–</b></span>
+  <span class="stat">Viewers <b id="viewers">–</b></span>
+  <button id="newGameBtn" title="Reset clock, score, passengers and trains">New game</button>
+  <label><input type="checkbox" id="optSigIds" checked> Signal IDs</label>
+  <label><input type="checkbox" id="optBlocks" checked> Block occupancy</label>
+</header>
+<main>
+  <div id="mapwrap">
+    <canvas id="map"></canvas>
+    <div id="tip"></div>
+    <div id="goalBanner"><div class="t" id="goalText"></div>
+      <div class="meta" id="goalSub"></div>
+      <button class="primary" id="bannerNewGame">New game</button></div>
+  </div>
+  <aside>
+    <h2>Score</h2>
+    <div id="score" class="score-card"></div>
+    <h2>Dispatch</h2>
+    <div id="dispatch"></div>
+    <div id="dispMsg"></div>
+    <h2>Services</h2>
+    <div id="services"></div>
+    <h2>Signals</h2>
+    <table><tbody id="signals"></tbody></table>
+    <h2>Junctions</h2>
+    <div id="switches"></div>
+  </aside>
+</main>
+
+<script>
+const TRAIN_COLOURS = ["#4ea1ff", "#f5b83d", "#c77dff", "#2ec4b6", "#ff7aa2", "#a3e635"];
+const TRACK_OFFSET = 9;     // px: parallel up/down lines are drawn this far apart from the centreline
+const TICK_MS = 200;        // server tick interval, used for smoothing
+
+const canvas = document.getElementById("map");
+const ctx = canvas.getContext("2d");
+const tip = document.getElementById("tip");
+
+let layout = null;          // { segments, nodes, routes }
+let segById = {};
+let stations = {};
+let state = null, prevState = null, stateAt = 0;
+let trainColour = {};
+let hover = null;           // {kind, id}
+let view = { scale: 1, ox: 0, oy: 0 };
+let ws = null;
+let dispatchBuiltFor = null;  // fleet ids the dispatch panel was built for
+// Default route offered for each train (the original timetable); any route can be picked.
+const DEFAULT_ROUTE = { T1: "UP", T2: "DOWN", T3: "BRANCH_UP_2", T4: "BRANCH_UP" };
+
+// ---------------------------------------------------------------- websocket
+function sendCommand(action, train, route) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) { showDispMsg(false, "Not connected"); return; }
+  ws.send(JSON.stringify({ type: "command", action, train, route }));
+}
+
+function connect() {
+  const host = location.host || "localhost:8000";
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  ws = new WebSocket(`${proto}://${host}/ws`);
+  ws.onopen = () => setConn(true);
+  ws.onclose = () => { setConn(false); setTimeout(connect, 1500); };
+  ws.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    if (data.type === "track_layout") {
+      layout = data;
+      segById = Object.fromEntries(data.segments.map(s => [s.id, s]));
+      const reverse = new Set(data.segments.map(s => s.from + ">" + s.to));
+      for (const s of data.segments) s.paired = reverse.has(s.to + ">" + s.from);
+      dispatchBuiltFor = null;   // routes may have changed: rebuild the dispatch panel
+      fitView();
+    } else if (data.type === "stations") {
+      stations = Object.fromEntries(data.stations.map(s => [s.id, s]));
+    } else if (data.type === "world_state") {
+      prevState = state;
+      state = data;
+      stateAt = performance.now();
+      // Colours are fixed per fleet slot, so a train keeps its colour across dispatches.
+      (data.dispatch?.fleet || []).forEach((f, i) => trainColour[f.id] ??= TRAIN_COLOURS[i % TRAIN_COLOURS.length]);
+      data.trains.forEach((t, i) => trainColour[t.id] ??= TRAIN_COLOURS[i % TRAIN_COLOURS.length]);
+      renderDispatch();
+      renderPanel();
+    } else if (data.type === "command_result") {
+      showDispMsg(data.ok, data.message);
+    }
+  };
+}
+function setConn(on) {
+  document.getElementById("connDot").className = "dot " + (on ? "on" : "off");
+  document.getElementById("connText").textContent = on ? "live" : "disconnected – retrying";
+}
+
+// ---------------------------------------------------------------- geometry
+function fitView() {
+  if (!layout) return;
+  const r = canvas.getBoundingClientRect();
+  const xs = layout.nodes.map(n => n.x), ys = layout.nodes.map(n => n.y);
+  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+  const pad = 90;
+  const scale = Math.min((r.width - 2 * pad) / Math.max(maxX - minX, 1),
+                         (r.height - 2 * pad) / Math.max(maxY - minY, 1));
+  view.scale = Math.max(scale, 0.2);
+  view.ox = r.width / 2 - (minX + maxX) / 2 * view.scale;
+  view.oy = r.height / 2 - (minY + maxY) / 2 * view.scale;
+}
+const sx = x => x * view.scale + view.ox;
+const sy = y => y * view.scale + view.oy;
+
+// Screen geometry of a segment: endpoints shifted to the right of the direction
+// of travel when a reverse twin exists, so both lines are visible.
+function segGeom(seg) {
+  let x1 = sx(seg.x1), y1 = sy(seg.y1), x2 = sx(seg.x2), y2 = sy(seg.y2);
+  const len = Math.hypot(x2 - x1, y2 - y1) || 1;
+  const dx = (x2 - x1) / len, dy = (y2 - y1) / len;
+  const nx = -dy, ny = dx;                     // right-hand normal (y points down)
+  const off = seg.paired ? TRACK_OFFSET : 0;
+  // shorten ends slightly so parallel lines meet the node cleanly
+  const trim = seg.paired ? 6 : 0;
+  x1 += nx * off + dx * trim; y1 += ny * off + dy * trim;
+  x2 += nx * off - dx * trim; y2 += ny * off - dy * trim;
+  return { x1, y1, x2, y2, dx, dy, nx, ny, len: Math.hypot(x2 - x1, y2 - y1) };
+}
+function pointOn(segId, pos_m) {
+  const seg = segById[segId];
+  if (!seg) return null;
+  const g = segGeom(seg);
+  const f = Math.min(Math.max(pos_m / seg.length_m, 0), 1);
+  return { x: g.x1 + (g.x2 - g.x1) * f, y: g.y1 + (g.y2 - g.y1) * f, g };
+}
+
+// ---------------------------------------------------------------- drawing
+function draw() {
+  const dpr = window.devicePixelRatio || 1;
+  const r = canvas.getBoundingClientRect();
+  if (canvas.width !== Math.round(r.width * dpr) || canvas.height !== Math.round(r.height * dpr)) {
+    canvas.width = Math.round(r.width * dpr);
+    canvas.height = Math.round(r.height * dpr);
+    fitView();
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, r.width, r.height);
+  drawGrid(r);
+  if (layout) {
+    drawTracks();
+    drawNodes();
+    if (state) { drawSignals(); drawTrains(); }
+  }
+  requestAnimationFrame(draw);
+}
+
+function drawGrid(r) {
+  ctx.strokeStyle = "rgba(255,255,255,0.035)";
+  ctx.lineWidth = 1;
+  for (let x = 0; x < r.width; x += 40) { ctx.beginPath(); ctx.moveTo(x + .5, 0); ctx.lineTo(x + .5, r.height); ctx.stroke(); }
+  for (let y = 0; y < r.height; y += 40) { ctx.beginPath(); ctx.moveTo(0, y + .5); ctx.lineTo(r.width, y + .5); ctx.stroke(); }
+}
+
+function blockOwner(blockId) {
+  const occ = state?.blocks?.[blockId];
+  return occ && occ.length ? occ : null;
+}
+
+function drawTracks() {
+  const showBlocks = document.getElementById("optBlocks").checked;
+  for (const seg of layout.segments) {
+    const g = segGeom(seg);
+    const occ = showBlocks ? blockOwner(seg.block) : null;
+    // ballast
+    ctx.lineCap = "round";
+    ctx.strokeStyle = "#1e2730";
+    ctx.lineWidth = 9;
+    line(g.x1, g.y1, g.x2, g.y2);
+    // rail
+    ctx.strokeStyle = occ ? trainColour[occ[0]] : "#4a5866";
+    ctx.globalAlpha = occ ? 0.85 : 1;
+    ctx.lineWidth = occ ? 4 : 3;
+    line(g.x1, g.y1, g.x2, g.y2);
+    ctx.globalAlpha = 1;
+
+    // direction chevrons
+    ctx.strokeStyle = occ ? "rgba(255,255,255,.55)" : "#6b7a89";
+    ctx.lineWidth = 1.5;
+    const step = 70;
+    for (let d = step / 2; d < g.len - 10; d += step) {
+      const px = g.x1 + g.dx * d, py = g.y1 + g.dy * d;
+      ctx.beginPath();
+      ctx.moveTo(px - g.dx * 4 + g.nx * 3.5, py - g.dy * 4 + g.ny * 3.5);
+      ctx.lineTo(px + g.dx * 1, py + g.dy * 1);
+      ctx.lineTo(px - g.dx * 4 - g.nx * 3.5, py - g.dy * 4 - g.ny * 3.5);
+      ctx.stroke();
+    }
+  }
+}
+
+function drawNodes() {
+  ctx.font = "600 13px system-ui, sans-serif";
+  ctx.textBaseline = "middle";
+  for (const n of layout.nodes) {
+    const x = sx(n.x), y = sy(n.y);
+    if (n.type === "station") {
+      const dwellingHere = state?.trains.some(t => t.status === "DWELL" && t.at_station === n.id);
+      ctx.fillStyle = dwellingHere ? "#4ea1ff" : "#26313d";
+      ctx.strokeStyle = "#4ea1ff";
+      ctx.lineWidth = 2;
+      roundRect(x - 13, y - 13, 26, 26, 5);
+      ctx.fill(); ctx.stroke();
+      const name = stations[n.id]?.name || n.id;
+      const w = ctx.measureText(name).width;
+      // centred above the marker, kept inside the canvas
+      const cw = canvas.getBoundingClientRect().width;
+      const lx = Math.min(Math.max(x - w / 2, 8), cw - w - 8);
+      ctx.fillStyle = "rgba(15,20,25,.85)";
+      roundRect(lx - 5, y - 42, w + 10, 20, 4); ctx.fill();
+      ctx.fillStyle = "#e6edf3";
+      ctx.fillText(name, lx, y - 32);
+      drawWaitingGauge(n.id, x, y);
+    } else if (n.type === "block_section") {
+      // intermediate block boundary: small marker, no label (signals carry the detail)
+      ctx.fillStyle = "#6b7a89";
+      ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
+    } else {
+      ctx.fillStyle = "#0f1419";
+      ctx.strokeStyle = "#8b98a5";
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = "#8b98a5";
+      ctx.font = "11px system-ui, sans-serif";
+      ctx.fillText(n.id, x + 12, y + 18);
+      ctx.font = "600 13px system-ui, sans-serif";
+    }
+  }
+}
+
+// Passengers waiting at a station: a small gauge under the marker that fills 0 → spawn_max.
+function drawWaitingGauge(stationId, x, y) {
+  const p = state?.passengers;
+  if (!p || p.waiting[stationId] == null) return;
+  const n = p.waiting[stationId], max = p.spawn_max || 50, f = Math.min(n / max, 1);
+  const w = 46, h = 6, gx = x - w / 2, gy = y + 20;
+  ctx.fillStyle = "rgba(15,20,25,.85)";
+  roundRect(gx - 4, gy - 4, w + 8, h + 22, 4); ctx.fill();
+  ctx.fillStyle = "#2a3541";
+  roundRect(gx, gy, w, h, 3); ctx.fill();
+  ctx.fillStyle = f >= 1 ? "#ff4d4f" : "#f5b83d";
+  if (f > 0) { roundRect(gx, gy, Math.max(w * f, 3), h, 3); ctx.fill(); }
+  ctx.font = "600 11px system-ui, sans-serif";
+  ctx.fillStyle = f >= 1 ? "#ff4d4f" : "#e6edf3";
+  const label = `${n} waiting`;
+  ctx.fillText(label, x - ctx.measureText(label).width / 2, gy + h + 9);
+  ctx.font = "600 13px system-ui, sans-serif";
+}
+
+function signalPositions() {
+  // Group signals mounted at the same point so they sit side by side, not on top of each other.
+  const groups = {};
+  for (const s of state.signals) (groups[s.segment + "@" + s.position_m] ??= []).push(s);
+  const out = [];
+  for (const list of Object.values(groups)) {
+    const p = pointOn(list[0].segment, list[0].position_m);
+    if (!p) continue;
+    const { g } = p;
+    list.forEach((s, i) => {
+      // heads stand outside the track (further right of travel), stepped back along it
+      const out_ = 20 + i * 15;
+      out.push({ s, bx: p.x, by: p.y,
+                 hx: p.x + g.nx * out_, hy: p.y + g.ny * out_, g });
+    });
+  }
+  return out;
+}
+
+function drawSignals() {
+  const showIds = document.getElementById("optSigIds").checked;
+  ctx.font = "10px ui-monospace, Consolas, monospace";
+  ctx.textBaseline = "middle";
+  for (const { s, bx, by, hx, hy, g } of signalPositions()) {
+    const red = s.aspect === "RED";
+    const col = red ? "#ff4d4f" : "#2fd36b";
+    const isHover = hover?.kind === "signal" && hover.id === s.id;
+    // post
+    ctx.strokeStyle = "#6b7a89"; ctx.lineWidth = 1.5;
+    line(bx + g.nx * 6, by + g.ny * 6, hx, hy);
+    // stop line across the track
+    ctx.strokeStyle = col; ctx.lineWidth = 2;
+    line(bx - g.nx * 6, by - g.ny * 6, bx + g.nx * 6, by + g.ny * 6);
+    // head
+    ctx.fillStyle = "#0b0f13";
+    ctx.strokeStyle = isHover ? "#fff" : "#3a4652";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(hx, hy, 7, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.shadowColor = col; ctx.shadowBlur = 10;
+    ctx.fillStyle = col;
+    ctx.beginPath(); ctx.arc(hx, hy, 4.5, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+    s._hx = hx; s._hy = hy;
+    if (showIds || isHover) {
+      const label = s.id.replace(/^SIG_/, "");
+      ctx.fillStyle = "#8b98a5";
+      const w = ctx.measureText(label).width;
+      const right = g.nx >= 0 || Math.abs(g.nx) < 0.3;
+      ctx.fillText(label, right ? hx + 11 : hx - 11 - w, hy);
+    }
+  }
+}
+
+function trainDisplayPos(t) {
+  // Smooth movement between 5 Hz server ticks.
+  const prev = prevState?.trains.find(p => p.id === t.id);
+  let pos = t.pos_m;
+  if (prev && prev.segment === t.segment && !t.finished) {
+    const f = Math.min((performance.now() - stateAt) / TICK_MS, 1);
+    pos = prev.pos_m + (t.pos_m - prev.pos_m) * f;
+  }
+  return pointOn(t.segment, pos);
+}
+
+function drawTrains() {
+  for (const t of state.trains) {
+    if (!t.segment) continue;
+    const p = trainDisplayPos(t);
+    if (!p) continue;
+    const col = trainColour[t.id];
+    const held = ["SIGNAL", "WAIT_BLOCK", "WAIT_SWITCH"].includes(t.status);
+    const ang = Math.atan2(p.g.dy, p.g.dx);
+    t._x = p.x; t._y = p.y;
+
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    if (held) {   // pulsing halo while held
+      const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 180);
+      ctx.strokeStyle = `rgba(255,77,79,${0.35 + 0.5 * pulse})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(0, 0, 17 + pulse * 3, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.rotate(ang);
+    ctx.globalAlpha = t.finished ? 0.4 : 1;
+    ctx.fillStyle = col;
+    ctx.strokeStyle = hover?.kind === "train" && hover.id === t.id ? "#fff" : "#0b0f13";
+    ctx.lineWidth = 2;
+    // body with a pointed nose in the direction of travel
+    ctx.beginPath();
+    ctx.moveTo(-13, -6); ctx.lineTo(8, -6); ctx.lineTo(14, 0); ctx.lineTo(8, 6); ctx.lineTo(-13, 6);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.restore();
+
+    // label
+    ctx.globalAlpha = t.finished ? 0.5 : 1;
+    ctx.font = "700 12px system-ui, sans-serif";
+    const label = t.finished ? t.id : `${t.id} · ${t.passengers ?? 0}`;
+    const w = ctx.measureText(label).width;
+    const lx = p.x - p.g.nx * 22 - w / 2, ly = p.y - p.g.ny * 22;
+    ctx.fillStyle = "rgba(11,15,19,.85)";
+    roundRect(lx - 4, ly - 9, w + 8, 18, 4); ctx.fill();
+    ctx.fillStyle = col;
+    ctx.fillText(label, lx, ly);
+    ctx.globalAlpha = 1;
+  }
+}
+
+function line(x1, y1, x2, y2) { ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); }
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+
+// ---------------------------------------------------------------- side panel
+const STATUS_TEXT = {
+  RUNNING: "Running", DWELL: "At platform", SIGNAL: "Held at signal",
+  WAIT_BLOCK: "Waiting for block", WAIT_SWITCH: "Waiting at junction", FINISHED: "Terminated",
+};
+const stName = id => stations[id]?.name || id || "–";
+const fmtTime = s => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+
+// ---------------------------------------------------------------- dispatcher
+const DISP_TEXT = { AVAILABLE: "Available", QUEUED: "Queued", IN_SERVICE: "In service", FINISHED: "Terminated" };
+let dispMsgTimer = null;
+
+function showDispMsg(ok, text) {
+  const el = document.getElementById("dispMsg");
+  el.textContent = text;
+  el.className = ok ? "" : "err";
+  clearTimeout(dispMsgTimer);
+  dispMsgTimer = setTimeout(() => { el.textContent = ""; }, 6000);
+}
+
+function routeLabel(id) {
+  const stops = layout?.routes?.[id]?.stops || [];
+  return stops.length ? `${id} — ${stops.map(stName).join(" → ")}` : id;
+}
+
+// Built once (so the route pickers keep their selection between 5 Hz updates),
+// then only the status text and buttons are refreshed.
+function buildDispatch(fleet) {
+  const routes = Object.keys(layout.routes);
+  const box = document.getElementById("dispatch");
+  box.innerHTML = fleet.map(f => {
+    const def = DEFAULT_ROUTE[f.id] && routes.includes(DEFAULT_ROUTE[f.id]) ? DEFAULT_ROUTE[f.id] : routes[0];
+    return `<div class="disp" style="--c:${trainColour[f.id]}" data-disp="${f.id}">
+      <span class="tid">${f.id}</span>
+      <span class="badge dstate"></span>
+      <div class="controls">
+        <select aria-label="Route for ${f.id}">
+          ${routes.map(r => `<option value="${r}"${r === def ? " selected" : ""}>${routeLabel(r)}</option>`).join("")}
+        </select>
+        <button class="primary" data-act="dispatch">Dispatch</button>
+        <button data-act="secondary" hidden></button>
+      </div>
+      <div class="why meta"></div>
+    </div>`;
+  }).join("");
+  dispatchBuiltFor = fleet.map(f => f.id).join(",");
+}
+
+function renderDispatch() {
+  const fleet = state?.dispatch?.fleet;
+  if (!fleet || !layout) return;
+  if (dispatchBuiltFor !== fleet.map(f => f.id).join(",")) buildDispatch(fleet);
+
+  for (const f of fleet) {
+    const row = document.querySelector(`[data-disp="${f.id}"]`);
+    if (!row) continue;
+    const badge = row.querySelector(".dstate");
+    badge.className = `badge dstate b-${f.state}`;
+    badge.textContent = DISP_TEXT[f.state] + (f.route && f.state !== "AVAILABLE" ? ` · ${f.route}` : "");
+
+    const primary = row.querySelector('[data-act="dispatch"]');
+    const secondary = row.querySelector('[data-act="secondary"]');
+    primary.disabled = f.state === "IN_SERVICE";
+    primary.textContent = f.state === "QUEUED" ? "Change route" : "Dispatch";
+    const sec = { QUEUED: "Cancel", IN_SERVICE: "Withdraw", FINISHED: "Clear" }[f.state];
+    secondary.hidden = !sec;
+    if (sec) { secondary.textContent = sec; secondary.dataset.cmd = f.state === "QUEUED" ? "cancel" : "withdraw"; }
+
+    const why = row.querySelector(".why");
+    why.textContent = f.state === "QUEUED"
+      ? `Waiting for ${f.waiting_for} to clear` + (f.blocked_by?.length ? ` (occupied by ${f.blocked_by.join(", ")})` : "")
+      : "";
+  }
+}
+
+document.getElementById("dispatch").addEventListener("click", (e) => {
+  const btn = e.target.closest("button");
+  const row = e.target.closest("[data-disp]");
+  if (!btn || !row || btn.disabled) return;
+  const train = row.dataset.disp;
+  if (btn.dataset.act === "dispatch") sendCommand("dispatch", train, row.querySelector("select").value);
+  else sendCommand(btn.dataset.cmd, train);
+});
+
+function renderScore() {
+  const p = state.passengers;
+  const box = document.getElementById("score");
+  const banner = document.getElementById("goalBanner");
+  if (!p) { box.innerHTML = `<span class="meta">Scoring disabled</span>`; banner.style.display = "none"; return; }
+  document.getElementById("hdrScore").textContent = p.score;
+  document.getElementById("hdrGoal").textContent = p.goal;
+  const pct = Math.min(100, 100 * p.score / p.goal);
+  const rate = state.time > 0 ? (p.score / state.time * 60).toFixed(0) : "0";
+  const stns = Object.entries(p.waiting).map(([id, n]) => {
+    const f = Math.min(100, 100 * n / p.spawn_max);
+    return `<div class="stn"><span>${stName(id)}</span>
+      <div class="bar"><i class="${f >= 100 ? "full" : ""}" style="width:${f}%"></i></div>
+      <span class="n">${n} wait</span></div>`;
+  }).join("");
+  const ev = p.events.slice(0, 5).map(e => `<div><b>${fmtTime(e.t)}</b> ${e.text}</div>`).join("");
+  box.innerHTML = `
+    <div class="row"><span class="score-big">${p.score} <small>/ ${p.goal} pts</small></span>
+      <span class="meta" style="margin-left:auto;text-align:right">${rate} pts/min<br>${p.on_board} on board</span></div>
+    <div class="bar"><i style="width:${pct}%"></i></div>
+    <div class="meta">1 point per passenger per trip · trains carry ${p.capacity} · everyone alights at each stop</div>
+    ${stns}
+    ${ev ? `<div class="events">${ev}</div>` : ""}`;
+
+  if (p.complete) {
+    document.getElementById("goalText").textContent = `Goal reached in ${fmtTime(p.goal_time)}`;
+    document.getElementById("goalSub").textContent = `${p.score} points (goal ${p.goal}) · ${p.goal_time.toFixed(1)} s simulated`;
+    banner.style.display = "block";
+  } else banner.style.display = "none";
+}
+
+function newGame() {
+  if (state?.passengers && !state.passengers.complete && state.time > 5 &&
+      !confirm("Start a new game? The clock, score and all trains will be reset.")) return;
+  sendCommand("new_game");
+}
+document.getElementById("newGameBtn").addEventListener("click", newGame);
+document.getElementById("bannerNewGame").addEventListener("click", newGame);
+
+function renderPanel() {
+  document.getElementById("simTime").textContent = fmtTime(state.time);
+  document.getElementById("viewers").textContent = state.viewers ?? "–";
+  renderScore();
+
+  document.getElementById("services").innerHTML = !state.trains.length
+    ? `<div class="empty">No trains in service — dispatch one above.</div>`
+    : state.trains.map(t => {
+    const col = trainColour[t.id];
+    const seg = segById[t.segment];
+    const pct = seg ? Math.round(100 * t.pos_m / seg.length_m) : 100;
+    let detail;
+    if (t.status === "DWELL") detail = `At <b>${stName(t.at_station)}</b> · departs in <b>${Math.ceil(t.dwell_s)}s</b>`;
+    else if (t.status === "FINISHED") detail = `Terminated at <b>${stName(t.at_station)}</b>`;
+    else if (t.held_at) detail = `Held by <b class="mono">${t.held_at}</b> · next <b>${stName(t.next_stop)}</b>`;
+    else detail = `Next stop <b>${stName(t.next_stop)}</b>`;
+    const kmh = (t.speed_mps * 3.6).toFixed(0);
+    const lim = seg ? seg.speed_limit_kmh : "–";
+    const hl = hover?.kind === "train" && hover.id === t.id ? " hl" : "";
+    return `<div class="card${hl}" style="--c:${col}" data-train="${t.id}">
+      <div class="row"><span class="tid">${t.id}</span><span class="route">${t.route}</span>
+        <span class="badge b-${t.status}">${STATUS_TEXT[t.status] || t.status}</span></div>
+      <div class="row meta">${detail}</div>
+      <div class="row meta"><span>On board <b>${t.passengers ?? 0}</b> / ${state.passengers?.capacity ?? "–"}</span>
+        <span>Delivered <b>${t.delivered ?? 0}</b></span></div>
+      <div class="row meta"><span><b>${kmh}</b> / ${lim} km/h</span>
+        <span class="mono">${t.segment ?? ""}</span>
+        <span>leg ${t.leg}/${t.legs}</span></div>
+      <div class="row"><div class="bar"><i style="width:${pct}%"></i></div></div>
+    </div>`;
+  }).join("");
+
+  document.getElementById("signals").innerHTML = state.signals.map(s => {
+    const hl = hover?.kind === "signal" && hover.id === s.id ? " class=\"hl\"" : "";
+    const occ = s.occupied_by.length
+      ? s.occupied_by.map(id => `<b style="color:${trainColour[id]}">${id}</b>`).join(", ")
+      : `<span class="meta">clear</span>`;
+    return `<tr${hl}><td class="lamp"><span class="lampdot ${s.aspect}"></span></td>
+      <td class="mono">${s.id.replace(/^SIG_/, "")}</td>
+      <td class="mono meta">${s.block_id}</td><td>${occ}</td></tr>`;
+  }).join("");
+
+  document.getElementById("switches").innerHTML = (state.switches || []).map(sw => `
+    <div class="card" style="--c:#8b98a5">
+      <div class="row"><span class="tid">${sw.id}</span>
+        <span class="badge ${sw.owner ? "b-WAIT_SWITCH" : "b-FINISHED"}">${sw.owner ? "Locked by " + sw.owner : "Free"}</span></div>
+      <div class="row meta">Set to <b class="mono">${sw.set_to}</b></div>
+      ${sw.queue.length ? `<div class="row meta">Queue: <b>${sw.queue.join(", ")}</b></div>` : ""}
+    </div>`).join("");
+}
+
+// ---------------------------------------------------------------- hover tooltips
+canvas.addEventListener("mousemove", (e) => {
+  if (!state) return;
+  const r = canvas.getBoundingClientRect();
+  const mx = e.clientX - r.left, my = e.clientY - r.top;
+  let best = null, bestD = 14;
+  for (const t of state.trains) {
+    if (t._x == null) continue;
+    const d = Math.hypot(t._x - mx, t._y - my);
+    if (d < bestD) { bestD = d; best = { kind: "train", id: t.id, obj: t }; }
+  }
+  for (const s of state.signals) {
+    if (s._hx == null) continue;
+    const d = Math.hypot(s._hx - mx, s._hy - my);
+    if (d < bestD) { bestD = d; best = { kind: "signal", id: s.id, obj: s }; }
+  }
+  const changed = (best?.id) !== (hover?.id);
+  hover = best;
+  if (changed) renderPanel();
+  if (!best) { tip.style.display = "none"; return; }
+
+  const o = state[best.kind === "train" ? "trains" : "signals"].find(x => x.id === best.id);
+  tip.innerHTML = best.kind === "train"
+    ? `<b style="color:${trainColour[o.id]}">${o.id}</b> · ${o.route}<br>
+       <span class="k">Status</span> ${STATUS_TEXT[o.status]}${o.held_at ? " (" + o.held_at + ")" : ""}<br>
+       <span class="k">Speed</span> ${(o.speed_mps * 3.6).toFixed(1)} km/h<br>
+       <span class="k">Segment</span> ${o.segment} @ ${o.pos_m.toFixed(0)} m<br>
+       <span class="k">Next stop</span> ${stName(o.next_stop)}`
+    : `<b>${o.id}</b> <span class="lampdot ${o.aspect}"></span><br>
+       <span class="k">On</span> ${o.segment} @ ${o.position_m} m<br>
+       <span class="k">For route to</span> ${o.next_segment ?? "any"}<br>
+       <span class="k">Protects</span> ${o.block_id}<br>
+       <span class="k">Occupied by</span> ${o.occupied_by.join(", ") || "nobody"}`;
+  tip.style.display = "block";
+  const tx = Math.min(mx + 16, r.width - tip.offsetWidth - 8);
+  const ty = Math.min(my + 16, r.height - tip.offsetHeight - 8);
+  tip.style.left = tx + "px"; tip.style.top = ty + "px";
+});
+canvas.addEventListener("mouseleave", () => { hover = null; tip.style.display = "none"; if (state) renderPanel(); });
+window.addEventListener("resize", fitView);
+
+connect();
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>

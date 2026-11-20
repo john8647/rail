@@ -1,0 +1,241 @@
+{
+  "nodes": {
+    "MAIN": { "type": "station", "x": 100, "y": 300 },
+    "JCT1": { "type": "junction", "x": 300, "y": 300 },
+    "BRANCH_HALT": { "type": "station", "x": 500, "y": 350 },
+    "TERMINUS": { "type": "station", "x": 700, "y": 550 },
+    "NORTH_HALT": { "type": "station", "x": 350, "y": 150 }
+
+  },
+
+  "segments": {
+    "SEG_MAIN_1": {
+      "from": "JCT1",
+      "to": "MAIN",
+      "length_m": 1200,
+      "speed_limit_kmh": 80,
+      "gradient_pct": 0.5,
+      "bidirectional": false
+    },
+    "SEG_MAIN_2": {
+      "from": "MAIN",
+      "to": "JCT1",
+      "length_m": 1200,
+      "speed_limit_kmh": 80,
+      "gradient_pct": -0.5,
+      "bidirectional": false
+    },
+
+    "SEG_BRANCH_2": {
+      "from": "JCT1",
+      "to": "BRANCH_HALT",
+      "length_m": 900,
+      "speed_limit_kmh": 50,
+      "gradient_pct": -0.3,
+      "bidirectional": false
+    },
+    "SEG_BRANCH_1": {
+      "from": "BRANCH_HALT",
+      "to": "JCT1",
+      "length_m": 900,
+      "speed_limit_kmh": 50,
+      "gradient_pct": 0.3,
+      "bidirectional": false
+    },
+
+    "SEG_TERMINUS_2": {
+      "from": "BRANCH_HALT",
+      "to": "TERMINUS",
+      "length_m": 300,
+      "speed_limit_kmh": 60,
+      "gradient_pct": 0.0,
+      "bidirectional": false
+    },
+    "SEG_TERMINUS_1": {
+      "from": "TERMINUS",
+      "to": "BRANCH_HALT",
+      "length_m": 300,
+      "speed_limit_kmh": 60,
+      "gradient_pct": 0.0,
+      "bidirectional": false
+    },
+    "SEG_NORTH_2": {
+      "from": "JCT1",
+      "to": "NORTH_HALT",
+      "length_m": 700,
+      "speed_limit_kmh": 50,
+      "gradient_pct": 0.0,
+      "bidirectional": false
+    },
+    "SEG_NORTH_1": {
+      "from": "NORTH_HALT",
+      "to": "JCT1",
+      "length_m": 700,
+      "speed_limit_kmh": 50,
+      "gradient_pct": 0.0,
+      "bidirectional": false
+    }
+  },
+
+  "switches": {
+    "SW_JCT1": {
+      "node": "JCT1",
+      "legs": ["SEG_MAIN_1", "SEG_MAIN_2", "SEG_BRANCH_1", "SEG_BRANCH_2", "SEG_NORTH_1", "SEG_NORTH_2"],
+      "current_route": "SEG_BRANCH_2"
+    }
+  },
+
+  "signals": {
+    "SIG_MAIN_DOWN_BRANCH": {
+      "segment": "SEG_MAIN_1",
+      "position_m": 1100,
+      "direction": "MAIN_TO_JCT1",
+      "next_segment": "SEG_BRANCH_2",
+      "block_id": "BLK_BRANCH_2"
+    },
+    "SIG_MAIN_DOWN_NORTH": {
+      "segment": "SEG_MAIN_1",
+      "position_m": 1100,
+      "direction": "MAIN_TO_JCT1",
+      "next_segment": "SEG_NORTH_2",
+      "block_id": "BLK_NORTH_2"
+    },
+    "SIG_BRANCH_UP_MAIN": {
+      "segment": "SEG_BRANCH_1",
+      "position_m": 800,
+      "direction": "BRANCH_HALT_TO_JCT1",
+      "next_segment": "SEG_MAIN_1",
+      "block_id": "BLK_MAIN_1"
+    },
+    "SIG_BRANCH_UP_NORTH": {
+      "segment": "SEG_BRANCH_1",
+      "position_m": 800,
+      "direction": "BRANCH_HALT_TO_JCT1",
+      "next_segment": "SEG_NORTH_2",
+      "block_id": "BLK_NORTH_2"
+    },
+    "SIG_MAIN_UP": {
+      "segment": "SEG_MAIN_2",
+      "position_m": 1100,
+      "direction": "JCT1_TO_MAIN",
+      "next_segment": "SEG_MAIN_1",
+      "block_id": "BLK_MAIN_1"
+    },
+    "SIG_BRANCH_DOWN": {
+      "segment": "SEG_BRANCH_2",
+      "position_m": 800,
+      "direction": "JCT1_TO_BRANCH_HALT",
+      "next_segment": "SEG_TERMINUS_2",
+      "block_id": "BLK_TERMINUS_2"
+    },
+    "SIG_NORTH_DOWN": {
+      "segment": "SEG_NORTH_2",
+      "position_m": 600,
+      "direction": "NORTH_HALT_TO_JCT1",
+      "next_segment": "SEG_MAIN_1",
+      "block_id": "BLK_MAIN_1"
+    },
+    "SIG_NORTH_DOWN_BRANCH": {
+      "segment": "SEG_NORTH_1",
+      "position_m": 600,
+      "direction": "NORTH_HALT_TO_JCT1",
+      "next_segment": "SEG_BRANCH_2",
+      "block_id": "BLK_BRANCH_2"
+    },
+    "SIG_BRANCH_TO_TERMINUS": {
+      "segment": "SEG_BRANCH_1",
+      "position_m": 800,
+      "direction": "BRANCH_HALT_TO_JCT1",
+      "next_segment": "SEG_NORTH_2",
+      "block_id": "BLK_NORTH_2"
+    }
+  },
+
+  "blocks": {
+    "BLK_MAIN_1": {
+      "segments": ["SEG_MAIN_1"]
+    },
+    "BLK_MAIN_2": {
+      "segments": ["SEG_MAIN_2"]
+   },
+    "BLK_BRANCH_1": {
+      "segments": ["SEG_BRANCH_1"]
+    },
+    "BLK_BRANCH_2": {
+      "segments": ["SEG_BRANCH_2"]
+   },
+    "BLK_NORTH_1": {
+      "segments": ["SEG_NORTH_1"]
+    },
+    "BLK_NORTH_2": {
+      "segments": ["SEG_NORTH_2"]
+   },
+    "BLK_TERMINUS_1": {
+      "segments": ["SEG_TERMINUS_1"]
+    },
+    "BLK_TERMINUS_2": {
+      "segments": ["SEG_TERMINUS_2"]
+   }
+ },
+
+  "stations": {
+    "MAIN": {
+      "name": "Main Station",
+      "platforms": {
+        "2": { "length_m": 200 }
+      },
+      "dwell_default_s": 30
+    },
+    "BRANCH_HALT": {
+      "name": "Branch Halt",
+      "platforms": {
+        "2": { "length_m": 60 }
+      },
+      "dwell_default_s": 20
+    },
+   "TERMINUS": {
+      "name": "Terminus",
+      "platforms": {
+        "2": { "length_m": 60 }
+      },
+      "dwell_default_s": 40
+    },
+   "NORTH_HALT": {
+      "name": "North Halt",
+      "platforms": {
+      "2": { "length_m": 60 }
+      },
+     "dwell_default_s": 20
+    }
+
+  },
+
+  "routes": {
+    "DOWN": {
+        "segments": ["SEG_MAIN_2", "SEG_BRANCH_2", "SEG_TERMINUS_2", "SEG_TERMINUS_1", "SEG_BRANCH_1", "SEG_MAIN_1"],
+        "stops": ["MAIN", "BRANCH_HALT", "TERMINUS", "BRANCH_HALT", "MAIN"]
+    },
+
+    "UP": {
+        "segments": ["SEG_TERMINUS_1", "SEG_BRANCH_1", "SEG_MAIN_1"],
+        "stops": ["TERMINUS", "BRANCH_HALT", "MAIN"]
+    },
+    "BRANCH_UP": {
+        "segments": ["SEG_NORTH_1", "SEG_MAIN_1"],
+        "stops": ["NORTH_HALT", "MAIN"]
+     },
+    "BRANCH_DOWN": {
+        "segments": ["SEG_MAIN_2", "SEG_NORTH_2"],
+        "stops": ["MAIN", "NORTH_HALT"]
+     },
+    "BRANCH_UP_2": {
+        "segments": ["SEG_BRANCH_1", "SEG_NORTH_2"],
+        "stops": ["BRANCH_HALT", "NORTH_HALT"]
+     },
+    "BRANCH_DOWN_2": {
+        "segments": ["SEG_NORTH_1", "SEG_BRANCH_2", "SEG_TERMINUS_2"],
+        "stops": ["NORTH_HALT", "BRANCH_HALT", "TERMINUS"]
+     }
+
+}
+}
