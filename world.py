@@ -35,11 +35,66 @@ class World:
     def add_switch(self, sw):
         self.switches[sw.id] = sw
 
-    def switch_at_node(self, node_id):
+    def switch_for_move(self, from_seg, to_seg):
+        """The switch that routes a train from from_seg into to_seg, if any.
+
+        The protecting signal names it; otherwise it is the switch whose
+        approaches and routes cover the move.
+        """
+        sig = self.protecting_signal(from_seg, to_seg)
+        if sig is not None and sig.switch in self.switches:
+            return self.switches[sig.switch]
         return next(
-            (sw for sw in self.switches.values() if sw.node == node_id),
+            (sw for sw in self.switches.values() if sw.controls(from_seg, to_seg)),
             None,
         )
+
+    def protecting_signal(self, from_seg, to_seg):
+        return next(
+            (s for s in self.signals.values()
+             if s.segment == from_seg and s.next_segment == to_seg),
+            None,
+        )
+
+    # ------------------------------------------------------------ interlocking
+    def clear_signal(self, sig, train):
+        """Try to clear a junction signal for an approaching train.
+
+        The signal clears only when (1) the destination block is free and
+        (2) the protected switch is set to the signal's required route and
+        locked for this train. The destination block is then reserved, so a
+        train approaching through the other switch cannot claim it too.
+        Returns (cleared, reason).
+        """
+        sw = self.switches[sig.switch]
+        dest = self.segments[sig.required_route]
+        direction = (dest.from_node.id, dest.to_node.id)
+        if self.block_has_conflict(sig.block_id, train.id, direction, dest.id):
+            # Don't sit at the head of the switch queue while we can't move.
+            sw.withdraw_request(train.id)
+            if sw.route_owner == train.id:
+                sw.release_route(train.id)
+            return False, f"block {sig.block_id} occupied"
+        if not sw.request_route(train.id, sig.required_route):
+            return False, (f"{sw.id} set to {sw.current_route}"
+                           + (f", locked by {sw.route_owner}" if sw.route_owner else ""))
+        if not self.occupy_block(sig.block_id, train.id, direction, dest.id):
+            sw.release_route(train.id)
+            return False, f"block {sig.block_id} occupied"
+        return True, None
+
+    def signal_aspect(self, sig):
+        """GREEN when the protected move could proceed (or has been cleared)."""
+        if sig.switch is None or sig.switch not in self.switches:
+            return "GREEN" if self.is_block_free(sig.block_id) else "RED"
+        sw = self.switches[sig.switch]
+        if sw.current_route != sig.required_route:
+            return "RED"
+        occupants = set(self.block_occupancy.get(sig.block_id, {}))
+        if sw.route_owner is not None:
+            # Route set and locked: green only for the train it was cleared for.
+            return "GREEN" if occupants == {sw.route_owner} else "RED"
+        return "GREEN" if not occupants else "RED"
 
     def add_signal(self, sig):
         self.signals[sig.id] = sig
@@ -181,6 +236,8 @@ class World:
                     "id": sw.id,
                     "node": sw.node,
                     "set_to": sw.current_route,
+                    "approaches": sw.approaches,
+                    "routes": sw.routes,
                     "owner": sw.route_owner,
                     "queue": [tid for tid, _ in sw.route_queue],
                 }
@@ -196,8 +253,7 @@ class World:
             progress = signal.position_m / segment.length_m
             x = segment.from_node.x +                 (segment.to_node.x - segment.from_node.x) * progress
             y = segment.from_node.y +                 (segment.to_node.y - segment.from_node.y) * progress
-            signal.aspect = "GREEN" if self.is_block_free(
-                signal.block_id) else "RED"
+            signal.aspect = self.signal_aspect(signal)
 
             signals_out.append({
                 "id": signal.id,
@@ -205,6 +261,8 @@ class World:
                 "position_m": signal.position_m,
                 "next_segment": signal.next_segment,
                 "block_id": signal.block_id,
+                "switch": signal.switch,
+                "required_route": signal.required_route,
                 "occupied_by": list(
                     self.block_occupancy.get(signal.block_id, {}).keys()),
                 "x": x,

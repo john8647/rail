@@ -686,7 +686,7 @@ function renderPanel() {
       : `<span class="meta">clear</span>`;
     return `<tr${hl}><td class="lamp"><span class="lampdot ${s.aspect}"></span></td>
       <td class="mono">${s.id.replace(/^SIG_/, "")}</td>
-      <td class="mono meta">${s.block_id}</td><td>${occ}</td></tr>`;
+      <td class="mono meta">${s.block_id}${s.switch ? ` · ${s.switch.replace(/^SW_/, "")}` : ""}</td><td>${occ}</td></tr>`;
   }).join("");
 
   document.getElementById("switches").innerHTML = (state.switches || []).map(sw => `
@@ -694,6 +694,7 @@ function renderPanel() {
       <div class="row"><span class="tid">${sw.id}</span>
         <span class="badge ${sw.owner ? "b-WAIT_SWITCH" : "b-FINISHED"}">${sw.owner ? "Locked by " + sw.owner : "Free"}</span></div>
       <div class="row meta">Set to <b class="mono">${sw.set_to}</b></div>
+      ${sw.approaches?.length ? `<div class="row meta">From <span class="mono">${sw.approaches.join(", ")}</span></div>` : ""}
       ${sw.queue.length ? `<div class="row meta">Queue: <b>${sw.queue.join(", ")}</b></div>` : ""}
     </div>`).join("");
 }
