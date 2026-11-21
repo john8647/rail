@@ -39,8 +39,9 @@ def load_world_from_json(path):
         world.add_switch(Switch(
             sw_id,
             sw["node"],
-            sw["legs"],
-            sw["current_route"]
+            sw["routes"],
+            sw["current_route"],
+            sw.get("approaches")
         ))
 
     # Signals
@@ -51,7 +52,9 @@ def load_world_from_json(path):
             sg["position_m"],
             sg["direction"],
             sg["block_id"],
-            sg.get("next_segment")
+            sg.get("next_segment"),
+            sg.get("switch"),
+            sg.get("required_route")
         ))
 
     # Blocks
@@ -124,6 +127,44 @@ def validate_world(world):
                 warnings.append(f"signal {sig.id} protects {sig.block_id} but "
                                 f"{nxt.id} is in {world.segment_to_block(nxt.id)}")
 
+    # Switches: approaches end at the switch node, routes leave it.
+    for sw in world.switches.values():
+        if sw.current_route not in sw.routes:
+            warnings.append(f"switch {sw.id} current_route {sw.current_route} "
+                            f"is not one of its routes")
+        for seg_id in sw.approaches:
+            if seg_id not in segs:
+                warnings.append(f"switch {sw.id} approach {seg_id} unknown")
+            elif segs[seg_id].to_node.id != sw.node:
+                warnings.append(f"switch {sw.id} approach {seg_id} does not end at {sw.node}")
+        for seg_id in sw.routes:
+            if seg_id not in segs:
+                warnings.append(f"switch {sw.id} route {seg_id} unknown")
+            elif segs[seg_id].from_node.id != sw.node:
+                warnings.append(f"switch {sw.id} route {seg_id} does not start at {sw.node}")
+    for sw_a in world.switches.values():
+        for sw_b in world.switches.values():
+            if sw_a.id < sw_b.id and set(sw_a.approaches) & set(sw_b.approaches):
+                warnings.append(f"switches {sw_a.id} and {sw_b.id} share approaches "
+                                f"{sorted(set(sw_a.approaches) & set(sw_b.approaches))}")
+
+    # Junction signals must match the switch they protect.
+    for sig in world.signals.values():
+        if sig.switch is None:
+            continue
+        sw = world.switches.get(sig.switch)
+        if sw is None:
+            warnings.append(f"signal {sig.id} protects unknown switch {sig.switch}")
+            continue
+        if sig.segment not in sw.approaches:
+            warnings.append(f"signal {sig.id} is on {sig.segment}, not an approach of {sw.id}")
+        if sig.required_route not in sw.routes:
+            warnings.append(f"signal {sig.id} requires {sig.required_route}, "
+                            f"which {sw.id} cannot be set to")
+        if sig.required_route != sig.next_segment:
+            warnings.append(f"signal {sig.id} requires {sig.required_route} but "
+                            f"leads to {sig.next_segment}")
+
     # Routes must be continuous, and every move between segments should have a signal.
     used_signals = set()
     for rt in world.routes.values():
@@ -146,6 +187,14 @@ def validate_world(world):
             used_signals.update(sigs)
             if not sigs:
                 warnings.append(f"route {rt.id}: no signal protects {a} -> {b}")
+            node = segs[a].to_node.id
+            if any(sw.node == node for sw in world.switches.values()):
+                sw = world.switch_for_move(a, b)
+                if sw is None:
+                    warnings.append(f"route {rt.id}: no switch at {node} routes {a} -> {b}")
+                elif not any(world.signals[s].switch == sw.id for s in sigs):
+                    warnings.append(f"route {rt.id}: {a} -> {b} uses {sw.id} but no "
+                                    f"signal protecting it names that switch")
     for sig_id in sorted(set(world.signals) - used_signals):
         warnings.append(f"signal {sig_id} is not used by any route")
 

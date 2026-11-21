@@ -131,8 +131,15 @@
   "switches": {
     "SW_JCT1": {
       "node": "JCT1",
-      "legs": ["SEG_MAIN_1", "SEG_MAIN_2", "SEG_BRANCH_1", "SEG_BRANCH_2", "SEG_NORTH_1", "SEG_NORTH_2"],
+      "approaches": ["SEG_MAIN_2"],
+      "routes": ["SEG_BRANCH_2", "SEG_NORTH_2"],
       "current_route": "SEG_BRANCH_2"
+    },
+    "SW_JCT2": {
+      "node": "JCT1",
+      "approaches": ["SEG_BRANCH_1", "SEG_NORTH_1"],
+      "routes": ["SEG_MAIN_1", "SEG_BRANCH_2", "SEG_NORTH_2"],
+      "current_route": "SEG_MAIN_1"
     }
   },
 
@@ -149,14 +156,18 @@
       "position_m": 550,
       "direction": "MAIN_IB_TO_JCT1",
       "next_segment": "SEG_BRANCH_2",
-      "block_id": "BLK_BRANCH_2"
+      "block_id": "BLK_BRANCH_2",
+      "switch": "SW_JCT1",
+      "required_route": "SEG_BRANCH_2"
     },
     "SIG_MAIN_DOWN_NORTH": {
       "segment": "SEG_MAIN_2",
       "position_m": 550,
       "direction": "MAIN_IB_TO_JCT1",
       "next_segment": "SEG_NORTH_2",
-      "block_id": "BLK_NORTH_2"
+      "block_id": "BLK_NORTH_2",
+      "switch": "SW_JCT1",
+      "required_route": "SEG_NORTH_2"
     },
     "SIG_BRANCH_DOWN_IB": {
       "segment": "SEG_BRANCH_2",
@@ -198,14 +209,18 @@
       "position_m": 400,
       "direction": "BRANCH_IB_TO_JCT1",
       "next_segment": "SEG_MAIN_1",
-      "block_id": "BLK_MAIN_1"
+      "block_id": "BLK_MAIN_1",
+      "switch": "SW_JCT2",
+      "required_route": "SEG_MAIN_1"
     },
     "SIG_BRANCH_UP_NORTH": {
       "segment": "SEG_BRANCH_1",
       "position_m": 400,
       "direction": "BRANCH_IB_TO_JCT1",
       "next_segment": "SEG_NORTH_2",
-      "block_id": "BLK_NORTH_2"
+      "block_id": "BLK_NORTH_2",
+      "switch": "SW_JCT2",
+      "required_route": "SEG_NORTH_2"
     },
     "SIG_MAIN_UP": {
       "segment": "SEG_MAIN_1",
@@ -247,14 +262,18 @@
       "position_m": 300,
       "direction": "NORTH_HALT_TO_JCT1",
       "next_segment": "SEG_MAIN_1",
-      "block_id": "BLK_MAIN_1"
+      "block_id": "BLK_MAIN_1",
+      "switch": "SW_JCT2",
+      "required_route": "SEG_MAIN_1"
     },
     "SIG_NORTH_DOWN_BRANCH": {
       "segment": "SEG_NORTH_1",
       "position_m": 300,
       "direction": "NORTH_IB_TO_JCT1",
       "next_segment": "SEG_BRANCH_2",
-      "block_id": "BLK_BRANCH_2"
+      "block_id": "BLK_BRANCH_2",
+      "switch": "SW_JCT2",
+      "required_route": "SEG_BRANCH_2"
     }
   },
 

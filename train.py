@@ -134,12 +134,13 @@ class Train:
 
             next_seg_id = route.segments[next_index]
 
-            # Switch check
-            sw = self.world.switch_at_node(end_node.id)
+            # Switch check: the points must lie towards next_seg_id and be
+            # locked for this train (normally done when its signal cleared).
+            sw = self.world.switch_for_move(seg.id, next_seg_id)
             if sw is not None:
                 if not sw.request_route(self.id, next_seg_id):
                     print(
-                        f"[{self.id}] Waiting at switch {sw.node}, route {next_seg_id} queued")
+                        f"[{self.id}] Waiting at {sw.id} ({sw.node}), route {next_seg_id} queued")
                     self.v_mps = 0.0
                     self.status, self.held_at = "WAIT_SWITCH", sw.id
                     return
@@ -189,7 +190,16 @@ class Train:
             sig_pos = sig.position_m
             block_id = sig.block_id
 
-            if self.pos_m < sig_pos:
+            if self.pos_m < sig_pos and sig.switch is not None:
+                # Junction signal: needs the switch set and locked for us
+                # and the destination block free before it clears.
+                cleared, reason = self.world.clear_signal(sig, self)
+                if not cleared:
+                    print(f"[{self.id}] RED at {sig.id}: {reason}")
+                    self.v_mps = 0.0
+                    self.status, self.held_at = "SIGNAL", sig.id
+                    return
+            elif self.pos_m < sig_pos:
                 if self.world.block_has_conflict(
                         block_id, self.id, self.travel_direction, seg.id):
                     print(
