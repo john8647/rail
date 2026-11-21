@@ -93,6 +93,11 @@
   .lampdot.RED { background: var(--red); box-shadow: 0 0 6px var(--red); }
   .lampdot.GREEN { background: var(--green); box-shadow: 0 0 6px var(--green); }
   tr.hl td { background: rgba(255,255,255,.05); }
+  .lampdot.sm { width: 7px; height: 7px; margin-right: 3px; box-shadow: none; }
+  .lampdot.sm.RED { box-shadow: 0 0 4px var(--red); }
+  .lampdot.sm.hl { outline: 1px solid #fff; outline-offset: 1px; }
+  .strip { display: inline-flex; flex-wrap: wrap; align-items: center; margin-right: 6px; }
+  td.subhead { padding-top: 10px; text-transform: uppercase; font-size: 10px; letter-spacing: .08em; }
   .mono { font-family: ui-monospace, Consolas, monospace; font-size: 11px; }
 
   /* dispatcher */
@@ -403,6 +408,11 @@ function drawWaitingGauge(stationId, x, y) {
   ctx.font = "600 13px system-ui, sans-serif";
 }
 
+// Numbered line signals (SIG_<LINE>_<UP|DOWN>_<NN>) protect plain block sections;
+// the named ones protect junctions and station approaches.
+const LINE_SIG_RE = /^SIG_(.+)_(UP|DOWN)_(\d\d)$/;
+const isLineSignal = s => LINE_SIG_RE.test(s.id);
+
 function signalPositions() {
   // Group signals mounted at the same point so they sit side by side, not on top of each other.
   const groups = {};
@@ -413,9 +423,10 @@ function signalPositions() {
     if (!p) continue;
     const { g } = p;
     list.forEach((s, i) => {
-      // heads stand outside the track (further right of travel), stepped back along it
-      const out_ = 20 + i * 15;
-      out.push({ s, bx: p.x, by: p.y,
+      // heads stand outside the track (further right of travel), stepped back along it;
+      // line signals are small lamps tucked in close to the rail
+      const out_ = isLineSignal(s) ? 10 : 20 + i * 15;
+      out.push({ s, bx: p.x, by: p.y, compact: isLineSignal(s),
                  hx: p.x + g.nx * out_, hy: p.y + g.ny * out_, g });
     });
   }
@@ -426,10 +437,22 @@ function drawSignals() {
   const showIds = document.getElementById("optSigIds").checked;
   ctx.font = "10px ui-monospace, Consolas, monospace";
   ctx.textBaseline = "middle";
-  for (const { s, bx, by, hx, hy, g } of signalPositions()) {
+  for (const { s, bx, by, hx, hy, g, compact } of signalPositions()) {
     const red = s.aspect === "RED";
     const col = red ? "#ff4d4f" : "#2fd36b";
     const isHover = hover?.kind === "signal" && hover.id === s.id;
+    s._hx = hx; s._hy = hy;
+    if (compact && !isHover) {
+      // block-section signal: short stop line + small lamp, label on hover only
+      ctx.strokeStyle = col; ctx.globalAlpha = 0.8; ctx.lineWidth = 1.5;
+      line(bx - g.nx * 4, by - g.ny * 4, bx + g.nx * 4, by + g.ny * 4);
+      ctx.globalAlpha = 1;
+      ctx.shadowColor = col; ctx.shadowBlur = red ? 8 : 4;
+      ctx.fillStyle = col;
+      ctx.beginPath(); ctx.arc(hx, hy, 2.8, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur = 0;
+      continue;
+    }
     // post
     ctx.strokeStyle = "#6b7a89"; ctx.lineWidth = 1.5;
     line(bx + g.nx * 6, by + g.ny * 6, hx, hy);
@@ -445,8 +468,7 @@ function drawSignals() {
     ctx.fillStyle = col;
     ctx.beginPath(); ctx.arc(hx, hy, 4.5, 0, Math.PI * 2); ctx.fill();
     ctx.shadowBlur = 0;
-    s._hx = hx; s._hy = hy;
-    if (showIds || isHover) {
+    if ((showIds && !compact) || isHover) {
       const label = s.id.replace(/^SIG_/, "");
       ctx.fillStyle = "#8b98a5";
       const w = ctx.measureText(label).width;
@@ -679,7 +701,29 @@ function renderPanel() {
     </div>`;
   }).join("");
 
-  document.getElementById("signals").innerHTML = state.signals.map(s => {
+  // Block-section signals: one strip of lamps per line and direction, in travel order.
+  const strips = {};
+  for (const s of state.signals) {
+    const m = s.id.match(LINE_SIG_RE);
+    if (m) (strips[`${m[1]} ${m[2]}`] ??= []).push([+m[3], s]);
+  }
+  const stripRows = Object.entries(strips).sort().map(([name, list]) => {
+    list.sort((a, b) => a[0] - b[0]);
+    const reds = list.filter(([, s]) => s.aspect === "RED").length;
+    const dots = list.map(([n, s]) => {
+      const hl = hover?.kind === "signal" && hover.id === s.id ? " hl" : "";
+      return `<span class="lampdot sm ${s.aspect}${hl}" title="${s.id} → ${s.block_id}${
+        s.occupied_by.length ? " (" + s.occupied_by.join(", ") + ")" : ""}"></span>`;
+    }).join("");
+    const [line, dir] = name.split(" ");
+    return `<tr><td class="mono" colspan="2">${line} ${dir === "UP" ? "▲" : "▼"} ${dir}</td>
+      <td colspan="2"><span class="strip">${dots}</span>
+      <span class="meta">${reds ? reds + " red" : "all clear"}</span></td></tr>`;
+  }).join("");
+
+  document.getElementById("signals").innerHTML = stripRows +
+    `<tr><td colspan="4" class="meta subhead">Junction &amp; station signals</td></tr>` +
+    state.signals.filter(s => !isLineSignal(s)).map(s => {
     const hl = hover?.kind === "signal" && hover.id === s.id ? " class=\"hl\"" : "";
     const occ = s.occupied_by.length
       ? s.occupied_by.map(id => `<b style="color:${trainColour[id]}">${id}</b>`).join(", ")
