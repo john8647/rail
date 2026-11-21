@@ -9,13 +9,20 @@ Rules:
   end of the train's route.
 * The game is complete when the score reaches ``goal_points``. The world then
   stops advancing and ``goal_time`` records how long it took.
+* The final rating rewards reaching the goal quickly with few trains:
+  every service (train) used adds ``service_penalty_s`` to the goal time, and
+  rating = RATING_SCALE / (goal_time + service_penalty_s * services_used).
+  Higher is better.
 """
+
+RATING_SCALE = 1_000_000
 
 DEFAULTS = {
     "spawn_max": 50,
     "fill_time_s": 120,
     "train_capacity": 40,
     "goal_points": 500,
+    "service_penalty_s": 60,
 }
 
 
@@ -28,6 +35,7 @@ class PassengerSystem:
         self.rate_per_s = self.spawn_max / self.fill_time_s
         self.capacity = cfg["train_capacity"]
         self.goal = cfg["goal_points"]
+        self.service_penalty_s = cfg["service_penalty_s"]
 
         self.waiting = {st_id: 0.0 for st_id in world.stations}
         self.score = 0
@@ -39,6 +47,19 @@ class PassengerSystem:
     @property
     def complete(self):
         return self.goal_time is not None
+
+    def rating(self, services_used):
+        """Final rating once the goal is reached (None before then)."""
+        if self.goal_time is None:
+            return None
+        adjusted_s = self.goal_time + self.service_penalty_s * max(services_used, 1)
+        return {
+            "rating": round(RATING_SCALE / adjusted_s),
+            "goal_time": round(self.goal_time, 1),
+            "services_used": services_used,
+            "penalty_s": self.service_penalty_s,
+            "adjusted_s": round(adjusted_s, 1),
+        }
 
     def update(self, dt_s):
         for st_id in self.waiting:
@@ -84,6 +105,7 @@ class PassengerSystem:
             "complete": self.complete,
             "capacity": self.capacity,
             "spawn_max": self.spawn_max,
+            "service_penalty_s": self.service_penalty_s,
             "on_board": sum(t.passengers for t in self.world.trains.values()),
             "waiting": {st: int(w + 1e-6) for st, w in self.waiting.items()},
             "delivered_at": dict(self.delivered_at),

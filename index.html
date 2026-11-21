@@ -142,6 +142,17 @@
   #goalBanner .t { font-size: 18px; font-weight: 700; color: var(--green); }
   #goalBanner button { margin-top: 8px; }
   header button { margin-left: 4px; }
+  header label.svc { margin-left: 0; color: var(--muted); }
+  header label.svc select { background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+                            border-radius: 4px; padding: 2px 4px; font: inherit; }
+  #newGameBtn.pending { border-color: var(--amber); color: var(--amber); }
+  .rating { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 12px; }
+  .rating .big { font-size: 20px; font-weight: 700; color: var(--green); font-variant-numeric: tabular-nums; }
+  .results { width: 100%; margin-top: 6px; font-size: 11px; font-variant-numeric: tabular-nums; }
+  .results td { padding: 2px 4px; border-bottom: 1px solid var(--line); }
+  .results tr.best td { color: var(--green); font-weight: 600; }
+  .results th { text-align: left; font-weight: 500; color: var(--muted); padding: 2px 4px; }
+  #goalBanner .r { font-size: 26px; font-weight: 800; color: var(--text); margin-top: 4px; }
 
   @media (max-width: 800px) {
     main { grid-template-columns: 1fr; grid-template-rows: 55vh 1fr; }
@@ -158,6 +169,8 @@
   <span class="stat">Sim time <b id="simTime">00:00</b></span>
   <span class="stat">Score <b id="hdrScore">0</b> / <b id="hdrGoal">–</b></span>
   <span class="stat">Viewers <b id="viewers">–</b></span>
+  <label class="svc" title="How many trains (T1…Tn) the next game may use. Each service used adds a time penalty to the final rating.">
+    Services <select id="servicesSel"></select></label>
   <button id="newGameBtn" title="Reset clock, score, passengers and trains">New game</button>
   <label><input type="checkbox" id="optSigIds" checked> Signal IDs</label>
   <label><input type="checkbox" id="optBlocks" checked> Block occupancy</label>
@@ -167,6 +180,7 @@
     <canvas id="map"></canvas>
     <div id="tip"></div>
     <div id="goalBanner"><div class="t" id="goalText"></div>
+      <div class="r" id="goalRating"></div>
       <div class="meta" id="goalSub"></div>
       <button class="primary" id="bannerNewGame">New game</button></div>
   </div>
@@ -186,7 +200,8 @@
 </main>
 
 <script>
-const TRAIN_COLOURS = ["#4ea1ff", "#f5b83d", "#c77dff", "#2ec4b6", "#ff7aa2", "#a3e635"];
+const TRAIN_COLOURS = ["#4ea1ff", "#f5b83d", "#c77dff", "#2ec4b6", "#ff7aa2", "#a3e635",
+                       "#ff9f43", "#5ee7ff", "#f368e0", "#feca57", "#1dd1a1", "#a29bfe"];
 const TRACK_OFFSET = 9;     // px: parallel up/down lines are drawn this far apart from the centreline
 const TICK_MS = 200;        // server tick interval, used for smoothing
 
@@ -207,9 +222,9 @@ let dispatchBuiltFor = null;  // fleet ids the dispatch panel was built for
 const DEFAULT_ROUTE = { T1: "UP", T2: "DOWN", T3: "BRANCH_UP_2", T4: "BRANCH_UP", T5: "BRANCH_DOWN" };
 
 // ---------------------------------------------------------------- websocket
-function sendCommand(action, train, route) {
+function sendCommand(action, train, route, extra = {}) {
   if (!ws || ws.readyState !== WebSocket.OPEN) { showDispMsg(false, "Not connected"); return; }
-  ws.send(JSON.stringify({ type: "command", action, train, route }));
+  ws.send(JSON.stringify({ type: "command", action, train, route, ...extra }));
 }
 
 function connect() {
@@ -646,25 +661,72 @@ function renderScore() {
       <span class="n">${n} wait</span></div>`;
   }).join("");
   const ev = p.events.slice(0, 5).map(e => `<div><b>${fmtTime(e.t)}</b> ${e.text}</div>`).join("");
+  const g = state.game;
   box.innerHTML = `
     <div class="row"><span class="score-big">${p.score} <small>/ ${p.goal} pts</small></span>
       <span class="meta" style="margin-left:auto;text-align:right">${rate} pts/min<br>${p.on_board} on board</span></div>
     <div class="bar"><i style="width:${pct}%"></i></div>
     <div class="meta">1 point per passenger per trip · trains carry ${p.capacity} · everyone alights at each stop</div>
     ${stns}
+    ${g ? ratingHtml(g) : ""}
     ${ev ? `<div class="events">${ev}</div>` : ""}`;
 
   if (p.complete) {
-    document.getElementById("goalText").textContent = `Goal reached in ${fmtTime(p.goal_time)}`;
-    document.getElementById("goalSub").textContent = `${p.score} points (goal ${p.goal}) · ${p.goal_time.toFixed(1)} s simulated`;
+    const r = g?.result;
+    document.getElementById("goalText").textContent =
+      `Goal reached in ${fmtTime(p.goal_time)}` + (r ? ` with ${r.services_used} service${r.services_used === 1 ? "" : "s"}` : "");
+    document.getElementById("goalRating").textContent = r ? `Rating ${r.rating.toLocaleString()}` +
+      (g.best && g.best.rating === r.rating && g.results.length > 1 ? " · new best!" : "") : "";
+    document.getElementById("goalSub").textContent = r
+      ? `1,000,000 ÷ (${r.goal_time.toFixed(0)} s + ${r.services_used} × ${r.penalty_s} s) · ${p.score} points`
+      : `${p.score} points (goal ${p.goal}) · ${p.goal_time.toFixed(1)} s simulated`;
     banner.style.display = "block";
   } else banner.style.display = "none";
 }
 
+// Services used + how the final rating is worked out, and this session's results.
+function ratingHtml(g) {
+  const live = g.result
+    ? `<span class="big">${g.result.rating.toLocaleString()}</span> final rating`
+    : `Rating on reaching the goal = <b>1,000,000 ÷ (seconds + ${g.penalty_s} s × services used)</b>`;
+  const rows = g.results.map(r => `<tr class="${g.best && r === g.results.find(x => x.rating === g.best.rating) ? "best" : ""}">
+      <td>${r.at}</td><td>${r.rating.toLocaleString()}</td><td>${fmtTime(r.goal_time)}</td>
+      <td>${r.services_used}${r.fleet !== r.services_used ? ` <span class="meta">of ${r.fleet}</span>` : ""}</td></tr>`).join("");
+  return `<div class="rating">
+    <div class="row"><span>Services used <b>${g.used}</b> / ${g.services}</span>
+      <span class="meta" style="margin-left:auto">+${g.penalty_s} s each</span></div>
+    <div class="meta" style="margin-top:2px">${live}</div>
+    ${rows ? `<table class="results"><tr><th>Finished</th><th>Rating</th><th>Time</th><th>Services</th></tr>${rows}</table>` : ""}
+  </div>`;
+}
+
+// Services picker: filled from the server's limit; shows the current game's value
+// until the user picks another, then highlights New game (it applies from the next game).
+function renderServicesPicker() {
+  const g = state?.game;
+  const sel = document.getElementById("servicesSel");
+  if (!g) return;
+  if (sel.options.length !== g.max_services) {
+    sel.innerHTML = Array.from({ length: g.max_services }, (_, i) => `<option value="${i + 1}">${i + 1}</option>`).join("");
+    sel.value = g.services;
+  }
+  if (!sel.dataset.touched && document.activeElement !== sel) sel.value = g.services;
+  const pending = +sel.value !== g.services;
+  const btn = document.getElementById("newGameBtn");
+  btn.classList.toggle("pending", pending);
+  btn.textContent = pending ? `New game (${sel.value} services)` : "New game";
+}
+document.getElementById("servicesSel").addEventListener("change", (e) => {
+  e.target.dataset.touched = "1";
+  if (state) renderServicesPicker();
+});
+
 function newGame() {
   if (state?.passengers && !state.passengers.complete && state.time > 5 &&
       !confirm("Start a new game? The clock, score and all trains will be reset.")) return;
-  sendCommand("new_game");
+  const sel = document.getElementById("servicesSel");
+  sendCommand("new_game", undefined, undefined, { services: +sel.value || undefined });
+  delete sel.dataset.touched;
 }
 document.getElementById("newGameBtn").addEventListener("click", newGame);
 document.getElementById("bannerNewGame").addEventListener("click", newGame);
@@ -673,6 +735,7 @@ function renderPanel() {
   document.getElementById("simTime").textContent = fmtTime(state.time);
   document.getElementById("viewers").textContent = state.viewers ?? "–";
   renderScore();
+  renderServicesPicker();
 
   document.getElementById("services").innerHTML = !state.trains.length
     ? `<div class="empty">No trains in service — dispatch one above.</div>`
