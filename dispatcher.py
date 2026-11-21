@@ -19,6 +19,7 @@ class Dispatcher:
         self.fleet = list(fleet)        # train ids that can be dispatched
         self.pending = []               # [{"train", "route", "since"}] in FIFO order
         self.location = {tid: None for tid in self.fleet}   # None = depot (any route)
+        self.used = set()               # trains that have entered service this game
 
     # ------------------------------------------------------------ helpers
     def origin(self, route_id):
@@ -122,6 +123,7 @@ class Dispatcher:
             if p["train"] in self.world.trains:
                 self.world.remove_train(p["train"])
             spawn_train(self.world, p["train"], p["route"])
+            self.used.add(p["train"])
             self.location[p["train"]] = self.origin(p["route"])   # where it will return to
             self.pending.remove(p)
             print(f"[dispatch] {p['train']} entered service on {p['route']}")
@@ -146,4 +148,4 @@ class Dispatcher:
                 fleet.append({"id": tid, "state": "AVAILABLE", "route": None})
             fleet[-1]["location"] = self.location[tid]          # None = depot
             fleet[-1]["allowed_routes"] = self.allowed_routes(tid)
-        return {"fleet": fleet}
+        return {"fleet": fleet, "used": sorted(self.used)}

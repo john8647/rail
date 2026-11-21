@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -14,23 +15,64 @@ BASE_DIR = Path(__file__).parent
 TICK_S = 0.2
 SEND_TIMEOUT_S = 1.0   # drop clients that can't keep up instead of stalling the sim
 
-# Trains the dispatcher can put into service from the UI.
-FLEET = ["T1", "T2", "T3", "T4", "T5"]
+# How many services (trains T1..Tn) a game may use; chosen in the UI per game.
+# The final rating charges a time penalty per service actually used.
+DEFAULT_SERVICES = 5
+MAX_SERVICES = 12
 # Optional services to dispatch at start-up, e.g. [("T1", "UP"), ("T2", "DOWN")].
 # Empty = the network starts clear and everything is dispatched from the UI.
 STARTUP_SERVICES = []
 
 world = None
 dispatcher = None
+services = DEFAULT_SERVICES   # fleet size for the current game
+result_recorded = False
+results = []                  # finished games this server session, newest first
 
 
-def new_game():
+def fleet_for(n):
+    return [f"T{i}" for i in range(1, n + 1)]
+
+
+def new_game(n_services=None):
     """(Re)build the world from network.json: clock, score and passengers back to 0."""
-    global world, dispatcher
+    global world, dispatcher, services, result_recorded
+    if n_services is not None:
+        services = n_services
     world = load_world_from_json(BASE_DIR / "network.json")
-    dispatcher = Dispatcher(world, FLEET)
+    dispatcher = Dispatcher(world, fleet_for(services))
+    result_recorded = False
     for train_id, route_id in STARTUP_SERVICES:
         dispatcher.dispatch(train_id, route_id)
+
+
+def record_result():
+    """Store the finished game's rating once, when the goal is first reached."""
+    global result_recorded
+    if result_recorded or not world.complete:
+        return
+    result_recorded = True
+    r = world.passengers.rating(len(dispatcher.used))
+    r.update(fleet=services, at=time.strftime("%H:%M"))
+    results.insert(0, r)
+    del results[20:]
+    print(f"[game] goal in {r['goal_time']}s with {r['services_used']} services "
+          f"-> rating {r['rating']}")
+
+
+def game_summary():
+    used = len(dispatcher.used)
+    ps = world.passengers
+    best = max(results, key=lambda r: r["rating"]) if results else None
+    return {
+        "services": services,
+        "max_services": MAX_SERVICES,
+        "used": used,
+        "penalty_s": ps.service_penalty_s if ps else None,
+        "result": ps.rating(used) if ps and ps.complete else None,
+        "results": results[:10],
+        "best": best,
+    }
 
 
 new_game()
@@ -45,6 +87,7 @@ def state_message():
     state = world.export_state()
     state["viewers"] = len(clients)
     state["dispatch"] = dispatcher.export()
+    state["game"] = game_summary()
     return json.dumps(state)
 
 
@@ -53,8 +96,11 @@ def handle_command(msg):
     action = msg.get("action")
     train_id = msg.get("train")
     if action == "new_game":
-        new_game()
-        return True, "New game started – clock and score reset"
+        n = msg.get("services", services)
+        if not isinstance(n, int) or isinstance(n, bool) or not 1 <= n <= MAX_SERVICES:
+            return False, f"Services must be a whole number from 1 to {MAX_SERVICES}"
+        new_game(n)
+        return True, f"New game started with {n} service{'s' if n != 1 else ''} – clock and score reset"
     if world.complete:
         return False, "Goal reached – start a new game to dispatch again"
     if action == "dispatch":
@@ -87,6 +133,7 @@ async def simulation_loop():
             if not world.complete:
                 dispatcher.process()  # let queued trains enter once their block clears
             world.update(TICK_S)
+            record_result()
             await broadcast(state_message())
         next_tick += TICK_S
         delay = next_tick - loop.time()
@@ -125,8 +172,9 @@ async def websocket_endpoint(ws: WebSocket):
 
     try:
         while True:
-            # Dispatcher commands: {"type": "command", "action": "dispatch"|"cancel"|"withdraw",
-            #                       "train": "T1", "route": "UP"}
+            # Commands: {"type": "command", "action": "dispatch"|"cancel"|"withdraw",
+            #            "train": "T1", "route": "UP"}
+            #           {"type": "command", "action": "new_game", "services": 4}
             raw = await ws.receive_text()
             try:
                 msg = json.loads(raw)
